@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Map</title>
+
+    <link rel="stylesheet" type="text/css" href="node_modules/leaflet/dist/leaflet.css"/>
+    <link rel="stylesheet" type="text/css" href="node_modules/leaflet-draw/dist/leaflet.draw.css"/>
+
+    <script src="node_modules/leaflet/dist/leaflet.js"></script>
+    <script src="node_modules/leaflet-draw/dist/leaflet.draw.js"></script>
+    <script src="node_modules/leaflet-draw-drag/dist/Leaflet.draw.drag.js"></script>
+    <script src="node_modules/terraformer/terraformer.js"></script>
+    <script src="node_modules/terraformer-wkt-parser/terraformer-wkt-parser.js"></script>
+    <script src="node_modules/jsts/dist/jsts.min.js"></script>
+    <script src="data.js"></script>
+</head>
+<body>
+
+<div id="mapid" style="height: 720px;"></div>
+
+<script>
+    let geojsonFeature = data;
+
+    let reader = new jsts.io.GeoJSONReader(null);
+    let writer = new jsts.io.WKTWriter(reader.parser.geometryFactory);
+    let representation = reader.read(geojsonFeature);
+
+    const tileLayers = {
+        thunderforest: L.tileLayer("http://{s}.tile.thunderforest.com/pioneer/{z}/{x}/{y}.png"),
+        stamen: L.tileLayer("http://{s}.tile.stamen.com/toner/{z}/{x}/{y}.png"),
+        opentopomap: L.tileLayer("http://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"),
+        cartocdn: L.tileLayer("http://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png")
+    };
+
+    window.onload = function () {
+
+        let options = {
+            center: [55.752023, 37.617499], // Moscow Kremlin
+            zoom: 11,
+            layers: [tileLayers.thunderforest]
+        };
+        let map_object = new L.Map('mapid', options);
+
+        L.control.layers(tileLayers).addTo(map_object);
+
+        let drawnItems = new L.FeatureGroup();
+        map_object.addLayer(drawnItems);
+
+        let drawControl = new L.Control.Draw({
+            draw: {
+                position: 'topleft',
+                polygon: {
+                    title: 'Draw a polygon!',
+                    allowIntersection: false,
+                    drawError: {
+                        color: '#b00b00',
+                        timeout: 1000
+                    },
+                    shapeOptions: {
+                        color: '#bada55'
+                    },
+                    showArea: true
+                },
+                polyline: {
+                    metric: false
+                },
+                circle: {
+                    shapeOptions: {
+                        color: '#662d91'
+                    }
+                }
+            },
+            edit: {
+                featureGroup: drawnItems
+            }
+        });
+
+        map_object.addControl(drawControl);
+
+        map_object.on('draw:created', function (e) {
+            let layer = e.layer;
+
+            updateFunction(layer);
+            drawnItems.addLayer(layer);
+        });
+
+        L.geoJSON(geojsonFeature).addTo(map_object);
+
+        map_object.on('draw:edited', function (e) {
+            let layers = e.layers;
+            layers.eachLayer(updateFunction);
+        });
+
+    };
+
+    let updateFunction = function (layer) {
+        let geometry = layer.toGeoJSON().geometry;
+
+        console.log(`Geometry:
+  ${Terraformer.WKT.convert(geometry)}
+        `);
+
+        console.log("Intersects:");
+
+        let features = representation.features;
+        let A = reader.read(geometry);
+
+        for (let i = 0; i < features.length; i++) {
+            let B = features[i].geometry;
+
+            if (A.intersects(B)) {
+                console.log(writer.write(B));
+
+                showMatrix(A.relate(B), B.relate(A));
+            }
+        }
+    };
+
+    function showMatrix(matrix, matrixT) {
+        let m = matrix.toString();
+
+        console.log(`Egenhofer-Matrix:
+
+  I B E
+I ${m[0]} ${m[1]} ${m[2]}
+B ${m[3]} ${m[4]} ${m[5]}
+E ${m[6]} ${m[7]} ${m[8]}
+        `);
+
+        console.log(`
+  Equals: ${matrix.isEquals()} ${matrixT.isEquals()}
+  Disjoint: ${matrix.isDisjoint()} ${matrixT.isDisjoint()}
+  Intersects: ${matrix.isIntersects()} ${matrixT.isIntersects()}
+  Touches: ${matrix.isTouches()} ${matrixT.isTouches()}
+  Crosses: ${matrix.isCrosses()} ${matrixT.isCrosses()}
+  Within: ${matrix.isWithin()} ${matrixT.isWithin()}
+  Contains: ${matrix.isContains()} ${matrixT.isContains()}
+  Overlaps: ${matrix.isOverlaps()} ${matrixT.isOverlaps()}
+  Covers: ${matrix.isCovers()} ${matrixT.isCovers()}
+  CoveredBy: ${matrix.isCoveredBy()} ${matrixT.isCoveredBy()}
+        `)
+    }
+</script>
+
+</body>
+</html>
